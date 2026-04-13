@@ -1,44 +1,59 @@
 import scrapy
 from datetime import datetime
-from ..items.manga_item import MangaItem
+from ..items import ProprieteItem # Utilise l'item qu'on a créé ensemble
 
-class SensCritiqueSpider(scrapy.Spider):
-    name = "senscritique"
+class CoinAfriqueSpider(scrapy.Spider):
+    name = "coinafrique"
     
     start_urls = [
         "https://tg.coinafrique.com/categorie/immobilier"
     ]
     
     def parse(self, response):
-        products = response.xpath('//div[contains(@class, "sc-b5c2c6dc-1")]')
+        # Sélecteur pour chaque carte d'annonce sur CoinAfrique
+        products = response.xpath('//div[contains(@class, "card-container")]')
         
         for product in products:
-            item = MangaItem()
+            item = ProprieteItem()
             
-           
-            title_elem = product.xpath('.//h2[contains(@class, "sc-f84047c3-1")]/a/text()').get()
-            if title_elem:
-                item["title"] = title_elem.strip()
+            # Titre de l'annonce
+            item["title"] = product.xpath('.//p[contains(@class, "title")]/text()').get(default="").strip()
             
-            rating_elem = product.xpath('.//span[contains(@class, "ezSuwK")]/text()').get()
-            if rating_elem:
-                item["rating"] = rating_elem.strip()
+            # Prix (on nettoie les espaces insécables et la devise)
+            price_raw = product.xpath('.//p[contains(@class, "price")]/text()').get(default="0")
+            item["price"] = price_raw.replace("CFA", "").replace(" ", "").strip()
             
-            genre_elems = product.xpath('.//a[contains(@href, "genre")]/text()').getall()
-            item["genre"] = [g.strip() for g in genre_elems if g.strip()]
+            # Localisation (Ville, Quartier)
+            item["address"] = product.xpath('.//p[contains(@class, "location")]/text()').get(default="").strip()
             
-           
-            url_elem = product.xpath('.//h2[contains(@class, "sc-f84047c3-1")]/a/@href').get()
-            if url_elem:
-                item["url"] = response.urljoin(url_elem)
-            else:
-                item["url"] = response.url
+            # URL de l'annonce
+            url_path = product.xpath('.//a[contains(@class, "card-image")]/@href').get()
+            item["listing_url"] = response.urljoin(url_path) if url_path else None
             
-            item["source"] = "senscritique"
+            # Image principale
+            item["image_urls"] = [product.xpath('.//img[contains(@class, "ad-image")]/@src').get()]
+            
+            # Métadonnées
+            item["source"] = "coinafrique"
             item["scraped_at"] = datetime.now().isoformat()
             
-            yield item
+            # Pour avoir les détails (surface, chambres), il faudrait suivre le lien
+            if item["listing_url"]:
+                yield scrapy.Request(item["listing_url"], callback=self.parse_details, meta={'item': item})
+            else:
+                yield item
         
-        next_page = response.xpath('//a[contains(@rel, "next")]/@href').get()
+        # Gestion de la pagination (Suivant)
+        next_page = response.xpath('//ul[@class="pagination"]/li/a[@aria-label="Next"]/@href').get()
         if next_page:
             yield response.follow(next_page, callback=self.parse)
+
+    def parse_details(self, response):
+        item = response.meta['item']
+        # Extraction de la description complète sur la page de l'annonce
+        item["description"] = "".join(response.xpath('//div[contains(@class, "description")]//text()').getall()).strip()
+        
+        # Sur CoinAfrique, les caractéristiques sont souvent dans des badges
+        item["property_type"] = response.xpath('//span[contains(@class, "category-badge")]/text()').get()
+        
+        yield item

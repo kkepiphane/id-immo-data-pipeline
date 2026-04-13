@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: ingestion/Dockerfile
-    container_name: manga_scraper
+    container_name: immo_scraper
     volumes:  
       - .:/app
     working_dir: /app/ingestion 
@@ -19,24 +19,24 @@ services:
     depends_on:
       - kafka
     networks:
-      - manga-network
+      - immo-network
 
 # ==============================================
 # SERVICE : POSTGRESQL 
 # ==============================================
   postgres:
     image: postgres:15
-    container_name: manga_postgres
+    container_name: immo_postgres
     environment:
-      POSTGRES_USER: manga
-      POSTGRES_PASSWORD: manga12
-      POSTGRES_DB: manga_db
+      POSTGRES_USER: immo
+      POSTGRES_PASSWORD: immo12
+      POSTGRES_DB: immo_db
     ports:
       - "5432:5432"
     networks:
-      - manga-network
+      - immo-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U manga -d manga_db"]
+      test: ["CMD-SHELL", "pg_isready -U immo -d immo_db"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -50,11 +50,11 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
     networks:
-      - manga-network
+      - immo-network
 
   kafka:
     image: confluentinc/cp-kafka:7.3.0
-    container_name: manga_kafka
+    container_name: immo_kafka
     depends_on:
       - zookeeper
     ports:
@@ -67,7 +67,7 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     networks:
-      - manga-network
+      - immo-network
 
 # ==============================================
 # SERVICE : Spark 
@@ -76,7 +76,7 @@ services:
     build:
       context: ./processing
       dockerfile: Dockerfile
-    container_name: manga_spark_master
+    container_name: immo_spark_master
     environment:
       - SPARK_MASTER_HOST=spark-master
       # - SPARK_MASTER_PORT=7077
@@ -91,13 +91,13 @@ services:
     volumes:
       - ./data_lake:/opt/spark/data_lake
     networks:
-      - manga-network
+      - immo-network
 
   spark-worker:
     build:
       context: ./processing
       dockerfile: Dockerfile
-    container_name: manga_spark_worker
+    container_name: immo_spark_worker
     environment:
       - SPARK_ROLE=worker
       - SPARK_MASTER_HOST=spark-master
@@ -108,13 +108,13 @@ services:
     volumes:
       - ./data_lake:/opt/spark/data_lake
     networks:
-      - manga-network
+      - immo-network
   
     spark-submit:
       build:
         context: ./processing
         dockerfile: Dockerfile
-      container_name: manga_spark_submit
+      container_name: immo_spark_submit
       depends_on:
         - kafka
         - spark-master
@@ -124,21 +124,21 @@ services:
         --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.2
         /opt/spark/jobs/streaming_job.py
       networks:
-        - manga-network
+        - immo-network
 
 # ==============================================
 # SERVICE : airflow 
 # ==============================================
   airflow:
     image: apache/airflow:2.9.0
-    container_name: manga_airflow
+    container_name: immo_airflow
     restart: always
     depends_on:
       - postgres
     environment:
       - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://manga:manga12@postgres/manga_db
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://immo:immo12@postgres/immo_db
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - .:/app
@@ -158,55 +158,55 @@ services:
       airflow webserver
       "
     networks:
-      - manga-network
+      - immo-network
 
 # ==============================================
 # SERVICE : monitoring 
 # ==============================================
-  prometheus:
-    image: prom/prometheus
-    container_name: manga_prometheus
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9090:9090"
-    networks:
-      - manga-network
+  # prometheus:
+  #   image: prom/prometheus
+  #   container_name: immo_prometheus
+  #   volumes:
+  #     - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+  #   ports:
+  #     - "9090:9090"
+  #   networks:
+  #     - immo-network
 
-  grafana:
-    image: grafana/grafana
-    container_name: manga_grafana
-    ports:
-      - "3000:3000"
-    networks:
-      - manga-network
+  # grafana:
+  #   image: grafana/grafana
+  #   container_name: immo_grafana
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - immo-network
 
-  loki:
-    image: grafana/loki
-    container_name: manga_loki
-    ports:
-      - "3100:3100"
-    networks:
-      - manga-network
+  # loki:
+  #   image: grafana/loki
+  #   container_name: immo_loki
+  #   ports:
+  #     - "3100:3100"
+  #   networks:
+  #     - immo-network
 
-  promtail:
-    image: grafana/promtail
-    container_name: manga_promtail
-    volumes:
-      - /var/log:/var/log
-    networks:
-      - manga-network
+  # promtail:
+  #   image: grafana/promtail
+  #   container_name: immo_promtail
+  #   volumes:
+  #     - /var/log:/var/log
+  #   networks:
+  #     - immo-network
       
-  kafka-exporter:
-    image: danielqsj/kafka-exporter
-    container_name: manga_kafka_exporter
-    command:
-      - "--kafka.server=kafka:9092"
-    ports:
-      - "9308:9308"
-    networks:
-      - manga-network
+  # kafka-exporter:
+  #   image: danielqsj/kafka-exporter
+  #   container_name: immo_kafka_exporter
+  #   command:
+  #     - "--kafka.server=kafka:9092"
+  #   ports:
+  #     - "9308:9308"
+  #   networks:
+  #     - immo-network
     
 
 networks:
-  manga-network:
+  immo-network:

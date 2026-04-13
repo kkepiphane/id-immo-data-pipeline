@@ -1,44 +1,57 @@
 import scrapy
 from datetime import datetime
-from ..items.manga_item import MangaItem
+from ..items import ProprieteItem
 
-class SensCritiqueSpider(scrapy.Spider):
-    name = "senscritique"
-    
-    start_urls = [
-        "https://intendance.tg"
-    ]
-    
+class IntendanceSpider(scrapy.Spider):
+    name = "intendance"
+    allowed_domains = ["intendance.tg"]
+    start_urls = ["https://intendance.tg"]
+
     def parse(self, response):
-        products = response.xpath('//div[contains(@class, "sc-b5c2c6dc-1")]')
+        # On cible chaque bloc d'annonce
+        listings = response.xpath('//div[contains(@class, "listing_wrapper")]')
         
-        for product in products:
-            item = MangaItem()
+        for ad in listings:
+            item = ProprieteItem()
             
-           
-            title_elem = product.xpath('.//h2[contains(@class, "sc-f84047c3-1")]/a/text()').get()
-            if title_elem:
-                item["title"] = title_elem.strip()
+            # Extraction des infos de base sur la carte
+            item["title"] = ad.xpath('.//h4/a/text()').get(default="").strip()
+            url = ad.xpath('.//h4/a/@href').get()
+            item["listing_url"] = response.urljoin(url)
             
-            rating_elem = product.xpath('.//span[contains(@class, "ezSuwK")]/text()').get()
-            if rating_elem:
-                item["rating"] = rating_elem.strip()
+            # Prix : on ne garde que les chiffres
+            price_raw = ad.xpath('.//span[@class="listing_unit_price"]/text()').get(default="0")
+            item["price"] = "".join(filter(str.isdigit, price_raw))
             
-            genre_elems = product.xpath('.//a[contains(@href, "genre")]/text()').getall()
-            item["genre"] = [g.strip() for g in genre_elems if g.strip()]
-            
-           
-            url_elem = product.xpath('.//h2[contains(@class, "sc-f84047c3-1")]/a/@href').get()
-            if url_elem:
-                item["url"] = response.urljoin(url_elem)
-            else:
-                item["url"] = response.url
-            
-            item["source"] = "senscritique"
+            item["neighborhood"] = ad.xpath('.//div[@class="listing_location"]/a/text()').get()
+            item["city"] = "Lomé"
+            item["source"] = "intendance.tg"
             item["scraped_at"] = datetime.now().isoformat()
             
-            yield item
-        
-        next_page = response.xpath('//a[contains(@rel, "next")]/@href').get()
+            # Aller chercher les détails sur la page de l'annonce
+            if item["listing_url"]:
+                yield scrapy.Request(item["listing_url"], callback=self.parse_details, meta={'item': item})
+            else:
+                yield item
+
+        # Pagination : bouton "Suivant"
+        next_page = response.xpath('//a[@aria-label="Next"]/@href').get()
         if next_page:
             yield response.follow(next_page, callback=self.parse)
+
+    def parse_details(self, response):
+        item = response.meta['item']
+        
+        # Description
+        desc = response.xpath('//div[@id="description"]//p/text()').getall()
+        item["description"] = " ".join(desc).strip()
+        
+        # Caractéristiques spécifiques (Surface, Type, etc.)
+        item["square_footage"] = response.xpath('//strong[contains(text(), "Surface")]/following-sibling::text()').get()
+        item["property_type"] = response.xpath('//li[contains(text(), "Type")]/strong/text()').get()
+        item["bedrooms"] = response.xpath('//span[contains(@data-original-title, "Chambres")]/following-sibling::text()').get()
+        
+        # Images
+        item["image_urls"] = response.xpath('//div[contains(@class, "owl-carousel")]//img/@src').getall()
+        
+        yield item

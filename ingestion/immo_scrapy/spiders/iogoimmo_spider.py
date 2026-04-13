@@ -1,44 +1,60 @@
 import scrapy
 from datetime import datetime
-from ..items.manga_item import MangaItem
+from ..items import ProprieteItem
 
-class SensCritiqueSpider(scrapy.Spider):
-    name = "senscritique"
-    
-    start_urls = [
-        "https://www.igoeimmobilier.com"
-    ]
-    
+class IgoeSpider(scrapy.Spider):
+    name = "igoe"
+    allowed_domains = ["igoeimmobilier.com"]
+    start_urls = ["https://igoeimmobilier.com"]
+
     def parse(self, response):
-        products = response.xpath('//div[contains(@class, "sc-b5c2c6dc-1")]')
+        # On cible chaque carte de propriété
+        listings = response.xpath('//div[contains(@class, "property-item")]')
         
-        for product in products:
-            item = MangaItem()
+        for ad in listings:
+            item = ProprieteItem()
             
-           
-            title_elem = product.xpath('.//h2[contains(@class, "sc-f84047c3-1")]/a/text()').get()
-            if title_elem:
-                item["title"] = title_elem.strip()
+            # Titre et Lien
+            item["title"] = ad.xpath('.//h3/a/text()').get(default="").strip()
+            url = ad.xpath('.//h3/a/@href').get()
+            item["listing_url"] = response.urljoin(url)
             
-            rating_elem = product.xpath('.//span[contains(@class, "ezSuwK")]/text()').get()
-            if rating_elem:
-                item["rating"] = rating_elem.strip()
+            # Prix (Extraction numérique)
+            price_raw = ad.xpath('.//span[@class="price"]/text()').get(default="0")
+            item["price"] = "".join(filter(str.isdigit, price_raw))
             
-            genre_elems = product.xpath('.//a[contains(@href, "genre")]/text()').getall()
-            item["genre"] = [g.strip() for g in genre_elems if g.strip()]
+            # Localisation
+            item["address"] = ad.xpath('.//span[@class="location"]/text()').get(default="").strip()
+            item["city"] = "Lomé" # Majoritairement Lomé
             
-           
-            url_elem = product.xpath('.//h2[contains(@class, "sc-f84047c3-1")]/a/@href').get()
-            if url_elem:
-                item["url"] = response.urljoin(url_elem)
-            else:
-                item["url"] = response.url
-            
-            item["source"] = "senscritique"
+            item["source"] = "igoeimmobilier"
             item["scraped_at"] = datetime.now().isoformat()
             
-            yield item
-        
-        next_page = response.xpath('//a[contains(@rel, "next")]/@href').get()
+            if item["listing_url"]:
+                yield scrapy.Request(item["listing_url"], callback=self.parse_details, meta={'item': item})
+            else:
+                yield item
+
+        # Pagination (Bouton page suivante)
+        next_page = response.xpath('//a[contains(@class, "next")]/@href').get()
         if next_page:
             yield response.follow(next_page, callback=self.parse)
+
+    def parse_details(self, response):
+        item = response.meta['item']
+        
+        # Description
+        desc = response.xpath('//div[contains(@class, "property-description")]//text()').getall()
+        item["description"] = " ".join(desc).strip()
+        
+        # Extraction des caractéristiques via les labels spécifiques du site
+        # On utilise une logique de recherche par texte car les IDs changent
+        item["property_type"] = response.xpath('//li[contains(., "Type")]/span/text()').get()
+        item["bedrooms"] = response.xpath('//li[contains(., "Chambres")]/span/text()').get()
+        item["square_footage"] = response.xpath('//li[contains(., "Surface")]/span/text()').get()
+        item["legal_doc"] = response.xpath('//li[contains(., "Document")]/span/text()').get()
+        
+        # Images (Galerie)
+        item["image_urls"] = response.xpath('//div[@id="property-gallery"]//img/@src').getall()
+        
+        yield item
