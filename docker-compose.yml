@@ -10,12 +10,7 @@ services:
     volumes:  
       - .:/app
     working_dir: /app/ingestion 
-    command: >
-      sh -c "
-      sleep 15 &&
-      scrapy crawl senscritique &&
-      scrapy crawl topito
-      "
+    command: tail -f /dev/null
     depends_on:
       - kafka
     networks:
@@ -110,21 +105,21 @@ services:
     networks:
       - immo-network
   
-    spark-submit:
-      build:
-        context: ./processing
-        dockerfile: Dockerfile
-      container_name: immo_spark_submit
-      depends_on:
-        - kafka
-        - spark-master
-      command: >
-        spark-submit
-        --master spark://spark-master:7077
-        --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.2
-        /opt/spark/jobs/streaming_job.py
-      networks:
-        - immo-network
+  spark-submit:
+    build:
+      context: ./processing
+      dockerfile: Dockerfile
+    container_name: immo_spark_submit
+    depends_on:
+      - kafka
+      - spark-master
+    command: >
+      spark-submit
+      --master spark://spark-master:7077
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.2
+      /opt/spark/jobs/streaming_job.py
+    networks:
+      - immo-network
 
 # ==============================================
 # SERVICE : airflow 

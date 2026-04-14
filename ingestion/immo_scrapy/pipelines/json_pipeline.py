@@ -14,7 +14,7 @@ class KafkaPipeline:
     def process_item(self, item, spider):
         # On envoie l'item dans le "tuyau" Kafka
         # C'est ultra rapide car c'est envoyé en mémoire
-        self.producer.send('manga_raw', dict(item))
+        self.producer.send('immo_raw', dict(item))
         return item
 
     def close_spider(self, spider):
