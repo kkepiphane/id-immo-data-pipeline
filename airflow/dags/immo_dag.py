@@ -1,21 +1,23 @@
 from airflow import DAG
-from airflow.operators.bash import BashOperator
+from airflow.providers.docker.operators.docker import DockerOperator
 from datetime import datetime
 
-default_args = {
-    "owner": "immo_admin",
-    "retries": 1,
-}
-
 with DAG(
-    dag_id="immo_scraping_pipeline",
-    default_args=default_args,
-    start_date=datetime(2024, 1, 1),
-    schedule_interval="0 0 * * *",  # Une fois par jour à minuit
-    catchup=False,
+    dag_id="weekly_scraping_pipeline",
+    start_date=datetime(2026, 1, 1),
+    schedule="0 2 * * 5",  # vendredi 02:00
+    catchup=False
 ) as dag:
 
-    run_spiders = BashOperator(
-        task_id="run_spiders",
-        bash_command="'scrapy crawl omnisoft && scrapy crawl intendance && scrapy crawl igoe && scrapy crawl coinafrique'",
-    )
+    scrape = DockerOperator(
+        task_id="run_scrapers",
+        image='immo_scraper:latest', 
+        # On utilise 'command' pour DockerOperator
+        command='bash -c "cd /app/ingestion && scrapy crawl omnisoft && scrapy crawl intendance && scrapy crawl igoe && scrapy crawl coinafrique"',
+        network_mode='id-immo_immo-network',
+
+        mount_tmp_dir=False,
+        docker_url='unix://var/run/docker.sock',
+        auto_remove=True,
+        force_pull=False,
+    ) 

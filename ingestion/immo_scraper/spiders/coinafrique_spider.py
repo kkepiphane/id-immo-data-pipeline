@@ -1,6 +1,6 @@
 import scrapy
 from datetime import datetime
-from ..items import ProprieteItem # Utilise l'item qu'on a créé ensemble
+from ..items.immo_item import ProprieteItem # Utilise l'item qu'on a créé ensemble
 
 class CoinAfriqueSpider(scrapy.Spider):
     name = "coinafrique"

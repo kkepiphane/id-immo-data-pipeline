@@ -1,6 +1,6 @@
 import scrapy
 from datetime import datetime
-from ..items import ProprieteItem
+from ..items.immo_item import ProprieteItem
 
 class IntendanceSpider(scrapy.Spider):
     name = "intendance"

@@ -1,6 +1,7 @@
 import scrapy
 import json
 from datetime import datetime
+from immo_scraper.items.immo_item import ProprieteItem
 
 class OmnisoftSpider(scrapy.Spider):
     name = "omnisoft"
@@ -28,14 +29,14 @@ class OmnisoftSpider(scrapy.Spider):
         properties = data.get("data", {}).get("getAllProperties", {}).get("data", [])
         
         for prop in properties:
-            item = {}
+            item = ProprieteItem()
             
             # Données de base
             item["listing_id"] = prop.get("id")
             item["title"] = prop.get("titre")
             item["description"] = prop.get("descriptif")
             item["price"] = prop.get("cout_mensuel")
-            item["bedrooms"] = prop.get("piece")
+            item["bedrooms"] = int(prop.get("piece") or 0)
             item["square_footage"] = prop.get("surface")
             item["wc_interne"] = prop.get("wc_douche_interne")
             item["legal_doc"] = prop.get("papier_propriete")
@@ -56,6 +57,7 @@ class OmnisoftSpider(scrapy.Spider):
                 item["image_urls"] = [v.get("url") for v in visuels if v.get("url")]
             
             # URL de l'annonce (Correction de l'URL immoask)
+            # item["listing_url"] = f"https://devapi.omnisoft.africa/property/{prop.get('id')}"
             item["listing_url"] = f"https://immoask.com{prop.get('id')}"
             
             item["source"] = "omnisoft_api"

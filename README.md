@@ -130,7 +130,7 @@ immo_scraping_pipeline
 docker compose down -v
 
 # Full restart
-docker compose up --build
+docker compose up --build -d
 
 # Remove orphan containers
 docker compose up --remove-orphans
