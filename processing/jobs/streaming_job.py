@@ -15,11 +15,11 @@ DATA_LAKE_PATH = "/opt/spark/data_lake"
 RAW_PATH = f"{DATA_LAKE_PATH}/raw"
 CHECKPOINT_RAW = f"{DATA_LAKE_PATH}/checkpoints/raw"
 
-POSTGRES_URL = "jdbc:postgresql://immo_postgres:5432/immo_db"
+POSTGRES_URL = "jdbc:postgresql://postgres-dw:5432/real_estate_dw"
 POSTGRES_TABLE = "proprietes"
 POSTGRES_PROPS = {
-    "user": "immo",
-    "password": "immo12",
+    "user": "dw_admin",
+    "password": "dwpassword",
     "driver": "org.postgresql.Driver"
 }
 

@@ -16,6 +16,6 @@ with DAG(
 ) as dag:
 
     run_spiders = BashOperator(
-        task_id="run_all_immo_spiders",
-        bash_command="docker exec immo_scraper sh -c 'scrapy crawl omnisoft && scrapy crawl intendance && scrapy crawl igoe && scrapy crawl coinafrique'",
+        task_id="run_spiders",
+        bash_command="'scrapy crawl omnisoft && scrapy crawl intendance && scrapy crawl igoe && scrapy crawl coinafrique'",
     )

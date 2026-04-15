@@ -1,4 +1,9 @@
 # version: "3.9"
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "50m"
+    max-file: "3"
 
 services:
 
@@ -15,27 +20,6 @@ services:
       - kafka
     networks:
       - immo-network
-
-# ==============================================
-# SERVICE : POSTGRESQL 
-# ==============================================
-  postgres:
-    image: postgres:15
-    container_name: immo_postgres
-    environment:
-      POSTGRES_USER: immo
-      POSTGRES_PASSWORD: immo12
-      POSTGRES_DB: immo_db
-    ports:
-      - "5432:5432"
-    networks:
-      - immo-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U immo -d immo_db"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    restart: unless-stopped
 
 # ==============================================
 # SERVICE : Kafka 
@@ -77,11 +61,10 @@ services:
       # - SPARK_MASTER_PORT=7077
       - NAMENODE_HOST=namenode
       - SPARK_ROLE=master
-      - SPARK_ROLE=submit
     depends_on:
       - kafka
     ports:
-      - "8080:8080" # Interface Web pour voir tes jobs
+      - "8082:8080" # Interface Web pour voir tes jobs
       - "7077:7077"
     volumes:
       - ./data_lake:/opt/spark/data_lake
@@ -105,56 +88,142 @@ services:
     networks:
       - immo-network
   
-  spark-submit:
+  # spark-submit:
+  #   build:
+  #     context: ./processing
+  #     dockerfile: Dockerfile
+  #   container_name: immo_spark_submit
+  #   depends_on:
+  #     - kafka
+  #     - spark-master
+  #   command: >
+  #     spark-submit
+  #     --master spark://spark-master:7077
+  #     --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.2
+  #     /opt/spark/jobs/streaming_job.py
+  #   networks:
+  #     - immo-network
+
+
+ # =============================================================================
+# SERVICE : POSTGRESQL – Data Warehouse (Serving Layer)
+# =============================================================================
+  postgres-dw:
+    image: postgres:15-alpine
+    container_name: immo-postgres-dw
+    hostname: postgres-dw
+    networks:
+      immo-network:
+        # ipv4_address: 172.20.0.40
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-dw-data:/var/lib/postgresql/data
+      - ./postgres/init-dw.sql:/docker-entrypoint-initdb.d/01-init-dw.sql:ro
+    environment:
+      POSTGRES_USER: dw_admin
+      POSTGRES_PASSWORD: dwpassword
+      POSTGRES_DB: real_estate_dw
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dw_admin -d real_estate_dw"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+# =============================================================================
+# SERVICE : POSTGRESQL – Airflow Metadata (séparée du DW)
+# =============================================================================
+  postgres-airflow:
+    image: postgres:15-alpine
+    container_name: immo-postgres-airflow
+    hostname: postgres-airflow
+    networks:
+      immo-network:
+        # ipv4_address: 172.20.0.41
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-airflow-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: airflow_user
+      POSTGRES_PASSWORD: airflow_pass
+      POSTGRES_DB: airflow_meta
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow_user -d airflow_meta"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+# =============================================================================
+# SERVICE : APACHE AIRFLOW – Orchestration & Scheduling
+# =============================================================================
+  airflow-init:
     build:
-      context: ./processing
+      context: ./airflow
       dockerfile: Dockerfile
-    container_name: immo_spark_submit
+    container_name: airflow-init
     depends_on:
-      - kafka
-      - spark-master
-    command: >
-      spark-submit
-      --master spark://spark-master:7077
-      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.2
-      /opt/spark/jobs/streaming_job.py
+      postgres-airflow:
+        condition: service_healthy
     networks:
       - immo-network
-
-# ==============================================
-# SERVICE : airflow 
-# ==============================================
-  airflow:
-    image: apache/airflow:2.9.0
-    container_name: immo_airflow
-    restart: always
-    depends_on:
-      - postgres
     environment:
-      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
-      - AIRFLOW__CORE__LOAD_EXAMPLES=False
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://immo:immo12@postgres/immo_db
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - .:/app
-    ports:
-      - "8085:8080"
-    command: >
-      bash -c "
-      airflow db init &&
-      airflow users create \
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow_user:airflow_pass@postgres-airflow:5432/airflow_meta
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate &&
+        airflow users create \
         --username admin \
         --password admin \
-        --firstname admin \
-        --lastname admin \
+        --firstname Admin \
+        --lastname User \
         --role Admin \
-        --email admin@mail.com &&
-      airflow scheduler &
-      airflow webserver
-      "
+        --email admin@example.com || true
+      
+
+  airflow-webserver:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    container_name: airflow-webserver
+    depends_on:
+      - airflow-init
+    ports:
+      - "8888:8080"
     networks:
       - immo-network
-
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./data:/shared
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow_user:airflow_pass@postgres-airflow:5432/airflow_meta
+      - AIRFLOW_CONN_SPARK_MASTER=spark://spark-master:7077
+      - AIRFLOW_CONN_POSTGRES_DW=postgresql://dw_admin:dwpassword@postgres-dw:5432/real_estate_dw
+    command: airflow webserver
+    
+  airflow-scheduler:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    container_name: airflow-scheduler
+    depends_on:
+      - airflow-init
+    networks:
+      - immo-network
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./data:/shared
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow_user:airflow_pass@postgres-airflow:5432/airflow_meta
+    command: airflow scheduler
 # ==============================================
 # SERVICE : monitoring 
 # ==============================================
@@ -205,3 +274,7 @@ services:
 
 networks:
   immo-network:
+
+volumes:
+  postgres-dw-data:
+  postgres-airflow-data:
