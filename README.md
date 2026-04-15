@@ -47,7 +47,7 @@ immo-data-pipeline/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/immo-data-pipeline.git
+git clone https://github.com/kkepiphane/immo-data-pipeline.git
 cd immo-data-pipeline
 ```
 
