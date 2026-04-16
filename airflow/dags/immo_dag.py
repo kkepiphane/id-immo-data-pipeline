@@ -13,7 +13,7 @@ with DAG(
         task_id="run_scrapers",
         image='immo_scraper:latest', 
         # On utilise 'command' pour DockerOperator
-        command='bash -c "cd /app/ingestion && scrapy crawl omnisoft && scrapy crawl intendance && scrapy crawl igoe && scrapy crawl coinafrique"',
+        command='bash -c "cd /app/ingestion && scrapy crawl intendance && scrapy crawl igoe && scrapy crawl coinafrique && scrapy crawl omnisoft"',
         network_mode='id-immo_immo-network',
 
         mount_tmp_dir=False,

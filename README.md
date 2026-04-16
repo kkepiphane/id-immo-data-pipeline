@@ -132,8 +132,14 @@ docker compose down -v
 # Full restart
 docker compose up --build -d
 
-# Remove orphan containers
-docker compose up --remove-orphans
+# Pour verifier les informations dans la base de donnes
+docker exec -it immo-postgres-dw psql -U dw_admin -d real_estate_dw
+
+#nombre total de ligne
+SELECT count(*) FROM proprietes;
+
+#Voir toutes les sources disponibles
+SELECT DISTINCT source FROM proprietes;
 ```
 
 ## Known Issues

@@ -57,8 +57,8 @@ class OmnisoftSpider(scrapy.Spider):
                 item["image_urls"] = [v.get("url") for v in visuels if v.get("url")]
             
             # URL de l'annonce (Correction de l'URL immoask)
-            # item["listing_url"] = f"https://devapi.omnisoft.africa/property/{prop.get('id')}"
-            item["listing_url"] = f"https://immoask.com{prop.get('id')}"
+            item["listing_url"] = f"https://devapi.omnisoft.africa/property/{prop.get('id')}"
+            # item["listing_url"] = f"https://immoask.com{prop.get('id')}"
             
             item["source"] = "omnisoft_api"
             item["scraped_at"] = datetime.now().isoformat()
