@@ -19,6 +19,7 @@ services:
     command: tail -f /dev/null
     depends_on:
       - kafka
+      - kafka-init
     networks:
       - immo-network
 
@@ -32,6 +33,23 @@ services:
     networks:
       - immo-network
 
+  kafka-init:
+    image: confluentinc/cp-kafka:7.3.0
+    depends_on:
+      - kafka
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      echo 'Waiting for Kafka...'
+      sleep 10
+      kafka-topics --create \
+        --topic immo_raw \
+        --bootstrap-server kafka:9092 \
+        --replication-factor 1 \
+        --partitions 1 || true
+      "
+    networks:
+      - immo-network
   kafka:
     image: confluentinc/cp-kafka:7.3.0
     container_name: immo_kafka
@@ -120,7 +138,7 @@ services:
       - "5434:5432"
     volumes:
       - postgres-dw-data:/var/lib/postgresql/data
-      - ./postgres/init-dw.sql:/docker-entrypoint-initdb.d/01-init-dw.sql:ro
+      - ./warehouse/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     environment:
       POSTGRES_USER: dw_admin
       POSTGRES_PASSWORD: dwpassword
