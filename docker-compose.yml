@@ -13,9 +13,9 @@ services:
       dockerfile: ingestion/Dockerfile
     image: immo_scraper:latest
     container_name: immo_scraper
-    volumes:  
+    volumes:
       - .:/app
-    working_dir: /app/ingestion 
+    working_dir: /app/ingestion
     command: tail -f /dev/null
     depends_on:
       - kafka
@@ -23,9 +23,9 @@ services:
     networks:
       - immo-network
 
-# ==============================================
-# SERVICE : Kafka 
-# ==============================================
+  # ==============================================
+  # SERVICE : Kafka 
+  # ==============================================
   zookeeper:
     image: confluentinc/cp-zookeeper:latest
     environment:
@@ -35,9 +35,10 @@ services:
 
   kafka-init:
     image: confluentinc/cp-kafka:7.3.0
+    container_name: immo_kafka_init
     depends_on:
       - kafka
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: [ "/bin/sh", "-c" ]
     command: |
       "
       echo 'Waiting for Kafka...'
@@ -66,10 +67,49 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     networks:
       - immo-network
+    # ==============================================
+    # SERVICE : HDFS
+    # ==============================================
+  namenode:
+    build:
+      context: ./hdfs
+      dockerfile: Dockerfile.namenode
+    container_name: namenode
+    environment:
+      - CLUSTER_NAME=immo-cluster
+    ports:
+      - "9870:9870" # UI Web HDFS
+      - "8020:8020" # RPC
+    volumes:
+      - namenode-data:/hadoop/dfs/name
+    networks:
+      - immo-network
+    healthcheck:
+      test: [ "CMD", "hdfs", "dfs", "-ls", "/" ]
+      interval: 10s
+      retries: 5
 
-# ==============================================
-# SERVICE : Spark 
-# ==============================================
+  datanode:
+    build:
+      context: ./hdfs
+      dockerfile: Dockerfile.datanode
+    container_name: datanode
+    environment:
+      - CLUSTER_NAME=immo-cluster
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+    volumes:
+      - datanode-data:/hadoop/dfs/data
+    depends_on:
+      - namenode
+    networks:
+      - immo-network
+    healthcheck:
+      test: [ "CMD", "hdfs", "dfs", "-ls", "/" ]
+      interval: 10s
+      retries: 5
+  # ==============================================
+  # SERVICE : Spark 
+  # ==============================================
   spark-master:
     build:
       context: ./processing
@@ -80,6 +120,7 @@ services:
       # - SPARK_MASTER_PORT=7077
       - NAMENODE_HOST=namenode
       - SPARK_ROLE=master
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
     depends_on:
       - kafka
     ports:
@@ -98,6 +139,7 @@ services:
     environment:
       - SPARK_ROLE=worker
       - SPARK_MASTER_HOST=spark-master
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
     depends_on:
       - spark-master
     ports:
@@ -106,34 +148,16 @@ services:
       - ./data_lake:/opt/spark/data_lake
     networks:
       - immo-network
-  
-  # spark-submit:
-  #   build:
-  #     context: ./processing
-  #     dockerfile: Dockerfile
-  #   container_name: immo_spark_submit
-  #   depends_on:
-  #     - kafka
-  #     - spark-master
-  #   command: >
-  #     spark-submit
-  #     --master spark://spark-master:7077
-  #     --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.2
-  #     /opt/spark/jobs/streaming_job.py
-  #   networks:
-  #     - immo-network
 
-
- # =============================================================================
-# SERVICE : POSTGRESQL – Data Warehouse (Serving Layer)
-# =============================================================================
+  # =============================================================================
+  # SERVICE : POSTGRESQL – Data Warehouse (Serving Layer)
+  # =============================================================================
   postgres-dw:
     image: postgres:15-alpine
     container_name: immo-postgres-dw
     hostname: postgres-dw
     networks:
-      immo-network:
-        # ipv4_address: 172.20.0.40
+      immo-network: # ipv4_address: 172.20.0.40
     ports:
       - "5434:5432"
     volumes:
@@ -145,22 +169,21 @@ services:
       POSTGRES_DB: real_estate_dw
     logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dw_admin -d real_estate_dw"]
+      test: [ "CMD-SHELL", "pg_isready -U dw_admin -d real_estate_dw" ]
       interval: 5s
       timeout: 3s
       retries: 5
     restart: unless-stopped
 
-# =============================================================================
-# SERVICE : POSTGRESQL – Airflow Metadata (séparée du DW)
-# =============================================================================
+  # =============================================================================
+  # SERVICE : POSTGRESQL – Airflow Metadata (séparée du DW)
+  # =============================================================================
   postgres-airflow:
     image: postgres:15-alpine
     container_name: immo-postgres-airflow
     hostname: postgres-airflow
     networks:
-      immo-network:
-        # ipv4_address: 172.20.0.41
+      immo-network: # ipv4_address: 172.20.0.41
     ports:
       - "5433:5432"
     volumes:
@@ -171,15 +194,15 @@ services:
       POSTGRES_DB: airflow_meta
     logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airflow_user -d airflow_meta"]
+      test: [ "CMD-SHELL", "pg_isready -U airflow_user -d airflow_meta" ]
       interval: 5s
       timeout: 3s
       retries: 5
     restart: unless-stopped
 
-# =============================================================================
-# SERVICE : APACHE AIRFLOW – Orchestration & Scheduling
-# =============================================================================
+  # =============================================================================
+  # SERVICE : APACHE AIRFLOW – Orchestration & Scheduling
+  # =============================================================================
   airflow-init:
     build:
       context: ./airflow
@@ -205,7 +228,6 @@ services:
         --lastname User \
         --role Admin \
         --email admin@example.com || true
-      
 
   airflow-webserver:
     build:
@@ -229,7 +251,7 @@ services:
       - AIRFLOW_CONN_POSTGRES_DW=postgresql://dw_admin:dwpassword@postgres-dw:5432/real_estate_dw
       - AIRFLOW__WEBSERVER__SECRET_KEY=my_super_secret_key_123 #q generer plus tard tu peux faire : command  => openssl rand -hex 32
     command: airflow webserver
-    
+
   airflow-scheduler:
     build:
       context: ./airflow
@@ -248,9 +270,9 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow_user:airflow_pass@postgres-airflow:5432/airflow_meta
       - AIRFLOW__WEBSERVER__SECRET_KEY=my_super_secret_key_123
     command: airflow scheduler
-# ==============================================
-# SERVICE : monitoring 
-# ==============================================
+  # ==============================================
+  # SERVICE : monitoring 
+  # ==============================================
   # prometheus:
   #   image: prom/prometheus
   #   container_name: immo_prometheus
@@ -284,7 +306,7 @@ services:
   #     - /var/log:/var/log
   #   networks:
   #     - immo-network
-      
+
   # kafka-exporter:
   #   image: danielqsj/kafka-exporter
   #   container_name: immo_kafka_exporter
@@ -294,11 +316,14 @@ services:
   #     - "9308:9308"
   #   networks:
   #     - immo-network
-    
+
 
 networks:
   immo-network:
 
+
 volumes:
   postgres-dw-data:
   postgres-airflow-data:
+  namenode-data:
+  datanode-data:

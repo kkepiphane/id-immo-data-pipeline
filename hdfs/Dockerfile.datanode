@@ -1,0 +1,10 @@
+# DOCKERFILE – HDFS DataNode
+FROM apache/hadoop:3.3.6
+
+USER root
+
+COPY datanode-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 9864
+ENTRYPOINT ["/entrypoint.sh"]

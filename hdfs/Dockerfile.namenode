@@ -1,0 +1,10 @@
+# DOCKERFILE – HDFS NameNode
+FROM apache/hadoop:3.3.6
+
+USER root
+
+COPY namenode-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 8020 9870
+ENTRYPOINT ["/entrypoint.sh"]
