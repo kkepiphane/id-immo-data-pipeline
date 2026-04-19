@@ -4,6 +4,9 @@ from pyspark.sql.functions import (
     trim, to_timestamp, coalesce, lit
 )
 from pyspark.sql.types import StructType, StringType, LongType, ArrayType
+import time
+from kafka import KafkaAdminClient
+from kafka.errors import NoBrokersAvailable
 
 # =========================================================
 # CONFIGURATION
@@ -53,6 +56,31 @@ schema = StructType() \
     .add("image_urls", ArrayType(StringType())) \
     .add("source", StringType()) \
     .add("scraped_at", StringType())
+
+def wait_for_kafka_topic(bootstrap_server, topic, max_retries=30, delay=5):
+    print(f"[INIT] Attente du topic '{topic}'...")
+    for i in range(max_retries):
+        try:
+            admin = KafkaAdminClient(
+                bootstrap_servers=bootstrap_server,
+                request_timeout_ms=5000
+            )
+            topics = admin.list_topics()
+            admin.close()
+            if topic in topics:
+                print(f"[INIT] ✅ Topic '{topic}' prêt !")
+                return
+            print(f"[INIT] [{i+1}/{max_retries}] Topic absent, attente {delay}s...")
+        except NoBrokersAvailable:
+            print(f"[INIT] [{i+1}/{max_retries}] Kafka pas encore dispo, attente {delay}s...")
+        except Exception as e:
+            print(f"[INIT] [{i+1}/{max_retries}] Erreur: {e}, attente {delay}s...")
+        time.sleep(delay)
+    raise RuntimeError(f"Topic '{topic}' introuvable après {max_retries} tentatives.")
+
+# Appel avant TOUT le reste
+wait_for_kafka_topic(KAFKA_BOOTSTRAP, TOPIC)
+
 
 # =========================================================
 # LECTURE KAFKA

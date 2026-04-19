@@ -11,6 +11,7 @@ ENV SPARK_HOME=/opt/spark
 ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 ENV PATH=$SPARK_HOME/bin:$JAVA_HOME/bin:$PATH
 ENV PYSPARK_SUBMIT_ARGS="--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.2 pyspark-shell"
+RUN pip install kafka-python
 
 # JDBC PostgreSQL
 COPY postgresql-42.6.2.jar /opt/spark/jars/

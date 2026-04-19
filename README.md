@@ -28,9 +28,10 @@ Scrapy → Kafka → Spark → Data Lake (HDFS)
 ```
 immo-data-pipeline/
 ├── ingestion/              # Scrapy spiders
+├── kafka/  
 ├── processing/             # Spark jobs and Dockerfile
 ├── airflow/                # Airflow DAGs and configuration
-├── postgres/               # SQL scripts for data warehouse
+├── warehouse/               # SQL scripts for data warehouse
 ├── data_lake/              # Parquet output from Spark
 ├── docker-compose.yml      # Infrastructure definition
 └── README.md
