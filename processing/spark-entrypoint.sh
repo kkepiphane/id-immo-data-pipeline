@@ -59,7 +59,7 @@ case "${SPARK_ROLE}" in
     # 1️⃣ Démarrer le master en arrière-plan
     ${SPARK_HOME}/bin/spark-class \
       org.apache.spark.deploy.master.Master \
-      --host 0.0.0.0 \
+      --host spark-master \
       --port 7077 \
       --webui-port 8080 &
 

@@ -1,7 +1,7 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, from_json, current_timestamp,
-    trim, lower, coalesce, lit
+    trim, to_timestamp, coalesce, lit
 )
 from pyspark.sql.types import StructType, StringType, LongType, ArrayType
 
@@ -62,6 +62,7 @@ kafka_df = spark.readStream \
     .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP) \
     .option("subscribe", TOPIC) \
     .option("startingOffsets", "earliest") \
+    .option("failOnDataLoss", "false")\
     .load()
 
 # =========================================================
@@ -74,10 +75,15 @@ parsed_df = kafka_df.selectExpr("CAST(value AS STRING)") \
 clean_df = parsed_df \
     .filter(col("listing_id").isNotNull()) \
     .withColumn("title", trim(col("title"))) \
-    .withColumn("price", coalesce(col("price"), lit(0))) \
+    .withColumn("price", col("price").cast("long")) \
     .withColumn("processed_at", current_timestamp())
 
+parsed_df.writeStream \
+    .format("console") \
+    .outputMode("append") \
+    .start()
 # Déduplication sur l'URL pour éviter les doublons dans le même batch
+
 dedup_df = clean_df.dropDuplicates(["listing_url"])
 
 # =========================================================
@@ -95,7 +101,8 @@ lake_query = dedup_df.writeStream \
 # =========================================================
 def write_to_postgres(batch_df, batch_id):
     try:
-        if not batch_df.isEmpty():
+        # if batch_df.take(1):
+        if not batch_df.rdd.isEmpty():
             # On convertit la liste d'images en String pour Postgres (plus simple)
             final_df = batch_df.withColumn("image_urls", col("image_urls").cast("string"))
             
@@ -107,6 +114,9 @@ def write_to_postgres(batch_df, batch_id):
                     properties=POSTGRES_PROPS
                 )
             print(f"--- [BATCH {batch_id}] {batch_df.count()} propriétés insérées.")
+            
+        print("BATCH COUNT:", batch_df.count())
+        batch_df.show()   
     except Exception as e:
         print(f"--- [ERREUR BATCH {batch_id}] : {e}")
 
@@ -114,6 +124,7 @@ postgres_query = dedup_df.writeStream \
     .foreachBatch(write_to_postgres) \
     .start()
 
+    
 # =========================================================
 # ATTENTE TERMINAISON
 # =========================================================

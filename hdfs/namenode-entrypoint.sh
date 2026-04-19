@@ -34,7 +34,7 @@ cat > $HADOOP_HOME/etc/hadoop/hdfs-site.xml <<EOF
 EOF
 
 # Format si nécessaire
-if [ ! -d "//hadoop/dfs/name/current" ]; then
+if [ ! -d "/hadoop/dfs/name/current" ]; then
   echo "[NameNode] Format HDFS..."
   hdfs namenode -format -force
 fi
@@ -52,6 +52,7 @@ echo "[HDFS] Initialisation..."
 hdfs dfs -mkdir -p /data_lake/{raw,processed,curated}
 hdfs dfs -mkdir -p /checkpoints/raw
 hdfs dfs -chmod -R 777 /data_lake
+hdfs dfs -chmod -R 777 /checkpoints
 
 echo "[HDFS] Ready."
 echo "[HDFS] NameNode started"

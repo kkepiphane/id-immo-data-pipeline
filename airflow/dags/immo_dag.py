@@ -14,7 +14,8 @@ with DAG(
     default_args=default_args,
 ) as dag:
 
-    spiders = ["intendance", "igoe", "coinafrique", "omnisoft"]
+    # spiders = ["intendance", "igoe", "coinafrique", "omnisoft"]
+    spiders = ["intendance", "igoe"]
 
     tasks = []
 
@@ -31,5 +32,4 @@ with DAG(
         )
         tasks.append(task)
 
-    # Exécution en parallèle (recommandé)
     tasks
