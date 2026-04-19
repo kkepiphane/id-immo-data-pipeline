@@ -5,17 +5,11 @@ End-to-end data engineering pipeline for real estate data ingestion, processing,
 ## Architecture Overview
 
 ```
-Scraping (Scrapy)
-        ↓
-Kafka (Message Broker)
-        ↓
-Spark Streaming (Processing)
-        ↓
-Data Lake (Parquet Storage)
-        ↓
-PostgreSQL Data Warehouse
-        ↑
-Apache Airflow (Orchestration)
+Scrapy → Kafka → Spark → Data Lake (HDFS)
+                               ↓
+                        Silver / Clean Data
+                               ↓
+                        PostgreSQL (DW)
 ```
 
 ## Tech Stack

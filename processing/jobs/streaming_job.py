@@ -63,6 +63,7 @@ kafka_df = spark.readStream \
     .option("subscribe", TOPIC) \
     .option("startingOffsets", "earliest") \
     .option("failOnDataLoss", "false")\
+    .option("maxOffsetsPerTrigger", 500)\
     .load()
 
 # =========================================================
@@ -78,22 +79,23 @@ clean_df = parsed_df \
     .withColumn("price", col("price").cast("long")) \
     .withColumn("processed_at", current_timestamp())
 
-parsed_df.writeStream \
-    .format("console") \
-    .outputMode("append") \
-    .start()
+# parsed_df.writeStream \
+#     .format("console") \
+#     .outputMode("append") \
+#     .start()
 # Déduplication sur l'URL pour éviter les doublons dans le même batch
 
-dedup_df = clean_df.dropDuplicates(["listing_url"])
+# dedup_df = clean_df.dropDuplicates(["listing_url"])
 
 # =========================================================
 # DESTINATION 1 : DATA LAKE (PARQUET)
 # =========================================================
-lake_query = dedup_df.writeStream \
+lake_query = clean_df.writeStream \
     .format("parquet") \
     .option("path", RAW_PATH) \
     .option("checkpointLocation", CHECKPOINT_RAW) \
     .outputMode("append") \
+    .trigger(processingTime='30 seconds') \
     .start()
 
 # =========================================================
@@ -101,27 +103,30 @@ lake_query = dedup_df.writeStream \
 # =========================================================
 def write_to_postgres(batch_df, batch_id):
     try:
-        # if batch_df.take(1):
-        if not batch_df.rdd.isEmpty():
-            # On convertit la liste d'images en String pour Postgres (plus simple)
+        # Mettre en cache pour éviter les recalculs
+        batch_df.cache()
+        count = batch_df.count()  # Une seule fois
+        
+        if count > 0:
             final_df = batch_df.withColumn("image_urls", col("image_urls").cast("string"))
+            # Déduplication ICI dans le batch
+            final_df = final_df.dropDuplicates(["listing_url"])
             
-            final_df.write \
-                .jdbc(
-                    url=POSTGRES_URL,
-                    table=POSTGRES_TABLE,
-                    mode="append",
-                    properties=POSTGRES_PROPS
-                )
-            print(f"--- [BATCH {batch_id}] {batch_df.count()} propriétés insérées.")
-            
-        print("BATCH COUNT:", batch_df.count())
-        batch_df.show()   
+            final_df.write.jdbc(
+                url=POSTGRES_URL,
+                table=POSTGRES_TABLE,
+                mode="append",
+                properties=POSTGRES_PROPS
+            )
+            print(f"--- [BATCH {batch_id}] {count} propriétés insérées.")
+        
+        batch_df.unpersist()
     except Exception as e:
         print(f"--- [ERREUR BATCH {batch_id}] : {e}")
 
-postgres_query = dedup_df.writeStream \
+postgres_query = clean_df.writeStream \
     .foreachBatch(write_to_postgres) \
+    .trigger(processingTime='30 seconds')\
     .start()
 
     

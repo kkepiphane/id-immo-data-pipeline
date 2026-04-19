@@ -3,19 +3,21 @@ from airflow.providers.docker.operators.docker import DockerOperator
 from datetime import datetime
 
 default_args = {
-    "owner": "airflow",
+    "owner": "Data engineer",
 }
 
 with DAG(
-    dag_id="weekly_scraping_pipeline",
+    dag_id="id_immo_scraping_pipeline",
     start_date=datetime(2026, 1, 1),
     schedule="0 2 * * 5",
     catchup=False,
     default_args=default_args,
+    description="airflow → scraping → kafka → Spark →  Data Lake (HDFS) → Silver / Clean Data → PostgreSQL",
+    tags=["airflow", "spark", "etl", "scrapy", "HDFS", "PostgreSQL", "id-immo"],
 ) as dag:
 
-    # spiders = ["intendance", "igoe", "coinafrique", "omnisoft"]
-    spiders = ["intendance", "igoe"]
+    spiders = ["intendance", "igoe", "coinafrique", "omnisoft"]
+    # spiders = ["intendance", "igoe"]
 
     tasks = []
 
