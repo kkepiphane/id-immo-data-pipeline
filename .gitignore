@@ -1,1 +1,2 @@
-data_lake
+/data_lake
+/airflow/dags/__pycache__/*
