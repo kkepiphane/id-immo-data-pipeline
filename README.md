@@ -135,6 +135,15 @@ SELECT count(*) FROM proprietes;
 
 #Voir toutes les sources disponibles
 SELECT DISTINCT source FROM proprietes;
+
+# Supprimer le Checkpoint sur HDFS
+docker exec namenode hdfs dfs -rm -r /checkpoints/raw
+
+# Nettoyer les fichiers de données brutes (Data Lake)
+docker exec namenode hdfs dfs -rm -r /data_lake/raw
+
+# Réinitialiser la table Postgres
+docker exec -it immo-postgres-dw psql -U dw_admin -d real_estate_dw -c "TRUNCATE TABLE proprietes;"
 ```
 
 ## Known Issues

@@ -1,9 +1,9 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, from_json, current_timestamp,
-    trim, to_timestamp, coalesce, lit
+    trim, to_timestamp, coalesce, lit, regexp_replace, when
 )
-from pyspark.sql.types import StructType, StringType, LongType, ArrayType, regexp_replace, when
+from pyspark.sql.types import StructType, StringType, LongType, ArrayType
 import time
 from kafka import KafkaAdminClient
 from kafka.errors import NoBrokersAvailable
@@ -17,6 +17,7 @@ TOPIC = "immo_raw"
 DATA_LAKE_PATH = "hdfs://namenode:8020/data_lake"
 RAW_PATH = f"{DATA_LAKE_PATH}/raw"
 CHECKPOINT_RAW = "hdfs://namenode:8020/checkpoints/raw"
+CHECKPOINT_PG = "hdfs://namenode:8020/checkpoints/postgres"
 
 POSTGRES_URL = "jdbc:postgresql://postgres-dw:5432/real_estate_dw"
 POSTGRES_TABLE = "proprietes"
@@ -31,6 +32,8 @@ POSTGRES_PROPS = {
 # =========================================================
 spark = SparkSession.builder \
     .appName("ImmoStreamingPipeline") \
+    .config("spark.local.dir", "/opt/spark/tmp") \
+    .config("spark.sql.shuffle.partitions", "4") \
     .getOrCreate()
 
 spark.sparkContext.setLogLevel("WARN")
@@ -93,7 +96,13 @@ kafka_df = spark.readStream \
     .option("failOnDataLoss", "false")\
     .option("maxOffsetsPerTrigger", 500)\
     .load()
-
+    
+query_debug = kafka_df.selectExpr("CAST(value AS STRING)") \
+    .writeStream \
+    .format("console") \
+    .option("truncate", "false") \
+    .outputMode("append") \
+    .start()
 # =========================================================
 # PARSE ET NETTOYAGE
 # =========================================================
@@ -109,22 +118,24 @@ clean_df = parsed_df \
     .withColumn("bedrooms", regexp_replace(col("bedrooms"), "[^0-9]", "").cast("int")) \
     .withColumn("square_footage", regexp_replace(col("square_footage"), "[^0-9]", "").cast("float")) \
     .withColumn("wc_interne", regexp_replace(col("wc_interne"), "[^0-9]", "").cast("int")) \
-    .withColumn("bedrooms", when(col("bedrooms") > 15, lit(None)).otherwise(col("bedrooms"))) # PROTECTION CONTRE LES ERREURS DE SCRAP (ex: plus de 15 chambres = probable erreur)
+    .withColumn("bedrooms", when(col("bedrooms").isNull() | (col("bedrooms") > 15), lit(None)).otherwise(col("bedrooms")))
 
 
 # dedup_df = clean_df.dropDuplicates(["listing_url"])
+# clean_df.writeStream.format("console").start()
 
 # =========================================================
 # DESTINATION 1 : DATA LAKE (PARQUET)
 # =========================================================
 lake_query = clean_df.writeStream \
+    .format("console") \
     .format("parquet") \
     .option("path", RAW_PATH) \
     .option("checkpointLocation", CHECKPOINT_RAW) \
     .outputMode("append") \
     .trigger(processingTime='30 seconds') \
     .start()
-
+    
 # =========================================================
 # DESTINATION 2 : POSTGRES
 # =========================================================
@@ -135,7 +146,11 @@ def write_to_postgres(batch_df, batch_id):
         count = batch_df.count()  # Une seule fois
         
         if count > 0:
-            final_df = batch_df.withColumn("image_urls", col("image_urls").cast("string"))
+            final_df = batch_df \
+                .withColumn("bedrooms", when(col("bedrooms").rlike("^[0-9]+$"), col("bedrooms").cast("int")).otherwise(None)) \
+                .withColumn("square_footage", when(col("square_footage").rlike("^[0-9]+$"), col("square_footage").cast("float")).otherwise(None)) \
+                .withColumn("wc_interne", when(col("wc_interne").rlike("^[0-9]+$"), col("wc_interne").cast("int")).otherwise(None)) \
+                .withColumn("image_urls", col("image_urls").cast("string"))
             # Déduplication ICI dans le batch
             final_df = final_df.dropDuplicates(["listing_url"])
             
@@ -153,6 +168,7 @@ def write_to_postgres(batch_df, batch_id):
 
 postgres_query = clean_df.writeStream \
     .foreachBatch(write_to_postgres) \
+    .option("checkpointLocation", CHECKPOINT_PG) \
     .trigger(processingTime='30 seconds')\
     .start()
 

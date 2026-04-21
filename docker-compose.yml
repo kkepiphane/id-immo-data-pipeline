@@ -121,6 +121,7 @@ services:
       - "7077:7077"
     volumes:
       - ./data_lake:/opt/spark/data_lake
+      - spark-data:/opt/spark/tmp
     networks:
       - immo-network
 
@@ -141,6 +142,7 @@ services:
       - "8081:8081"
     volumes:
       - ./data_lake:/opt/spark/data_lake
+      - spark-data:/opt/spark/tmp
     networks:
       - immo-network
 
@@ -322,3 +324,4 @@ volumes:
   postgres-airflow-data:
   namenode-data:
   datanode-data:
+  spark-data:
