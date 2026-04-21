@@ -26,7 +26,7 @@ with DAG(
             task_id=f"scrape_{spider}",
             image="immo_scraper:latest",
             command=f'bash -c "cd /app/ingestion && scrapy crawl {spider}"',
-            network_mode="id-immo_immo-network",
+            network_mode="id-immo-data-pipeline_immo-network", #nom-dossier_immo-network
             mount_tmp_dir=False,
             docker_url="unix://var/run/docker.sock",
             auto_remove=True,
