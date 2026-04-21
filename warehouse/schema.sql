@@ -4,9 +4,9 @@ CREATE TABLE IF NOT EXISTS proprietes (
     property_type TEXT,
     offer_type TEXT,
     description TEXT, 
-    bedrooms TEXT,    
-    square_footage TEXT,
-    wc_interne TEXT,  
+    bedrooms INTEGER,         -- Changé en INTEGER
+    square_footage FLOAT,     -- Changé en FLOAT (pour les m2 précis)
+    wc_interne INTEGER,  
     legal_doc TEXT,   
     price BIGINT,
     address TEXT,     

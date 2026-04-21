@@ -3,7 +3,7 @@ from pyspark.sql.functions import (
     col, from_json, current_timestamp,
     trim, to_timestamp, coalesce, lit
 )
-from pyspark.sql.types import StructType, StringType, LongType, ArrayType
+from pyspark.sql.types import StructType, StringType, LongType, ArrayType, regexp_replace, when
 import time
 from kafka import KafkaAdminClient
 from kafka.errors import NoBrokersAvailable
@@ -105,13 +105,12 @@ clean_df = parsed_df \
     .filter(col("listing_id").isNotNull()) \
     .withColumn("title", trim(col("title"))) \
     .withColumn("price", col("price").cast("long")) \
-    .withColumn("processed_at", current_timestamp())
+    .withColumn("processed_at", current_timestamp())\
+    .withColumn("bedrooms", regexp_replace(col("bedrooms"), "[^0-9]", "").cast("int")) \
+    .withColumn("square_footage", regexp_replace(col("square_footage"), "[^0-9]", "").cast("float")) \
+    .withColumn("wc_interne", regexp_replace(col("wc_interne"), "[^0-9]", "").cast("int")) \
+    .withColumn("bedrooms", when(col("bedrooms") > 15, lit(None)).otherwise(col("bedrooms"))) # PROTECTION CONTRE LES ERREURS DE SCRAP (ex: plus de 15 chambres = probable erreur)
 
-# parsed_df.writeStream \
-#     .format("console") \
-#     .outputMode("append") \
-#     .start()
-# Déduplication sur l'URL pour éviter les doublons dans le même batch
 
 # dedup_df = clean_df.dropDuplicates(["listing_url"])
 
