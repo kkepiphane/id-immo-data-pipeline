@@ -80,7 +80,7 @@ class CoinAfriqueSpider(scrapy.Spider):
             item["scraped_at"] = datetime.now().isoformat()
             
             # Initialisation
-            item["description"] = item["bedrooms"] = item["square_footage"] = item["wc_interne"] = ""
+            item["description"] = item["bedrooms"] = item["square_footage"] = item["wc_interne"] = None
             item["legal_doc"] = "Non spécifié"
             
             yield scrapy.Request(item["listing_url"], callback=self.parse_details, meta={'item': item})

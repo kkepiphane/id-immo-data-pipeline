@@ -110,15 +110,39 @@ parsed_df = kafka_df.selectExpr("CAST(value AS STRING)") \
     .select(from_json(col("value"), schema).alias("data")) \
     .select("data.*")
 
+# clean_df = parsed_df \
+#     .filter(col("listing_id").isNotNull()) \
+#     .withColumn("title", trim(col("title"))) \
+#     .withColumn("price", col("price").cast("long")) \
+#     .withColumn("processed_at", current_timestamp())\
+#     .withColumn("bedrooms", regexp_replace(col("bedrooms"), "[^0-9]", "").cast("int")) \
+#     .withColumn("square_footage", regexp_replace(col("square_footage"), "[^0-9]", "").cast("float")) \
+#     .withColumn("wc_interne", regexp_replace(col("wc_interne"), "[^0-9]", "").cast("int")) \
+#     .withColumn("bedrooms", when(col("bedrooms").isNull() | (col("bedrooms") > 15), lit(None)).otherwise(col("bedrooms")))
+
 clean_df = parsed_df \
     .filter(col("listing_id").isNotNull()) \
     .withColumn("title", trim(col("title"))) \
+    .withColumn("property_type",
+        when(col("property_type").rlike("(?i)villa"), "Villa")
+        .when(col("property_type").rlike("(?i)maison"), "Maison")
+        .when(col("property_type").rlike("(?i)terrain"), "Terrain")
+        .when(col("property_type").rlike("(?i)appartement"), "Appartement")
+        .otherwise("Autre")
+    ) \
+    .withColumn("offer_type",
+        when(col("offer_type").rlike("(?i)lou"), "Location")
+        .when(col("offer_type").rlike("(?i)ven"), "Vente")
+        .otherwise("Inconnu")
+    ) \
     .withColumn("price", col("price").cast("long")) \
-    .withColumn("processed_at", current_timestamp())\
-    .withColumn("bedrooms", regexp_replace(col("bedrooms"), "[^0-9]", "").cast("int")) \
-    .withColumn("square_footage", regexp_replace(col("square_footage"), "[^0-9]", "").cast("float")) \
-    .withColumn("wc_interne", regexp_replace(col("wc_interne"), "[^0-9]", "").cast("int")) \
-    .withColumn("bedrooms", when(col("bedrooms").isNull() | (col("bedrooms") > 15), lit(None)).otherwise(col("bedrooms")))
+    .withColumn("bedrooms", col("bedrooms").cast("int")) \
+    .withColumn("square_footage", col("square_footage").cast("float")) \
+    .withColumn("wc_interne", col("wc_interne").cast("int")) \
+    .filter(col("price").isNotNull()) \
+    .filter(col("price") > 0) \
+    .filter(col("city").isNotNull()) \
+    .withColumn("processed_at", current_timestamp())
 
 
 # dedup_df = clean_df.dropDuplicates(["listing_url"])
@@ -147,9 +171,6 @@ def write_to_postgres(batch_df, batch_id):
         
         if count > 0:
             final_df = batch_df \
-                .withColumn("bedrooms", when(col("bedrooms").rlike("^[0-9]+$"), col("bedrooms").cast("int")).otherwise(None)) \
-                .withColumn("square_footage", when(col("square_footage").rlike("^[0-9]+$"), col("square_footage").cast("float")).otherwise(None)) \
-                .withColumn("wc_interne", when(col("wc_interne").rlike("^[0-9]+$"), col("wc_interne").cast("int")).otherwise(None)) \
                 .withColumn("image_urls", col("image_urls").cast("string"))
             # Déduplication ICI dans le batch
             final_df = final_df.dropDuplicates(["listing_url"])
